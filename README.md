@@ -35,6 +35,30 @@ npm install
 npm run dev
 ```
 
+`npm run dev` starts both the Vite interface and the local Node API.
+
+### Administration du catalogue de prix
+
+The administration page is intentionally unlinked from the main interface. Open `/admin/catalogue` and sign in with the server-side `ADMIN_PASSWORD` environment variable (minimum 12 characters). The password is never sent to or stored in the browser after the login request.
+
+For local development in PowerShell:
+
+```powershell
+$env:ADMIN_PASSWORD = "choose-a-long-password"
+npm.cmd run dev
+```
+
+In production, build the interface and start the Node server in the same deployment:
+
+```powershell
+$env:ADMIN_PASSWORD = "choose-a-long-password"
+$env:APP_ORIGIN = "https://your-domain.example"
+npm.cmd run build
+npm.cmd run start
+```
+
+The shared catalogue is stored in `server/data/catalogue-prix.json` by default. Configure `CATALOGUE_FILE` to point to a persistent writable volume when deploying; otherwise catalogue edits may be lost when the hosting platform replaces the application instance. Use HTTPS in production.
+
 ### Type-Check, Compile and Minify for Production
 
 ```sh

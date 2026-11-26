@@ -1,0 +1,27 @@
+{
+  "prixPanneau": 100000,
+  "prixBatterieKwh": 200000,
+  "prixOnduleurKVA": 150000,
+  "materiels": [
+    {
+      "id": "regulateur-mppt",
+      "nom": "Régulateur MPPT",
+      "prixUnitaire": 150000
+    },
+    {
+      "id": "rails-fixation",
+      "nom": "Rails de fixation",
+      "prixUnitaire": 50000
+    },
+    {
+      "id": "coffret-protection",
+      "nom": "Coffret de protection AC/DC",
+      "prixUnitaire": 75000
+    },
+    {
+      "id": "cables-dc",
+      "nom": "Câbles DC (mètres)",
+      "prixUnitaire": 2000
+    }
+  ]
+}

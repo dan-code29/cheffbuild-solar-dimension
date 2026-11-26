@@ -4,7 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "run-p dev-client api",
+    "dev-client": "vite",
+    "api": "node server/index.mjs",
+    "start": "node server/index.mjs",
+    "test": "node --experimental-strip-types --test server/*.test.mjs",
     "build": "run-p type-check \"build-only {@}\" --",
     "preview": "vite preview",
     "build-only": "vite build",

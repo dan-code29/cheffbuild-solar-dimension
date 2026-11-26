@@ -1,9 +1,12 @@
 // src/stores/projectStore.ts
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
+import type { CatalogueMateriel, CataloguePrix } from '../data/priceCatalog'
+import type { TypeBatterie } from '../data/batteryProfiles'
 
 export type Equipement = { nom: string, quantite: number, puissance: number, puissanceDemarrage: number, heures: number }
 export type Materiel = { nom: string, quantite: number, prixUnitaire: number }
+export type ModeSchema = 'unifilaire' | 'multifilaire'
 
 export const useProjectStore = defineStore('project', () => {
   
@@ -17,6 +20,10 @@ export const useProjectStore = defineStore('project', () => {
   // --- GROUPE ÉLECTROGÈNE ---
   const aGroupeElectrogene = ref<boolean>(false)
   const puissanceGroupeKVA = ref<number>(5)
+  const modeSchema = ref<ModeSchema>('unifilaire')
+  const typeBatterie = ref<TypeBatterie>('lithium')
+  const tensionBatterieUnitaire = ref(48)
+  const capaciteBatterieUnitaireAh = ref(100)
 
   // --- ÉQUIPEMENTS & MATÉRIELS ---
   const equipements = ref<Equipement[]>([
@@ -35,6 +42,7 @@ export const useProjectStore = defineStore('project', () => {
   const prixPanneau = ref<number>(100000)
   const prixBatterieKwh = ref<number>(200000)
   const prixOnduleurKVA = ref<number>(150000)
+  const catalogueMateriels = ref<CatalogueMateriel[]>([])
 
   // --- MODE SOMBRE ---
   const isDarkMode = ref<boolean>(false)
@@ -50,6 +58,10 @@ export const useProjectStore = defineStore('project', () => {
       if (data.paramSys) paramSys.value = data.paramSys
       if (data.aGroupeElectrogene !== undefined) aGroupeElectrogene.value = data.aGroupeElectrogene
       if (data.puissanceGroupeKVA) puissanceGroupeKVA.value = data.puissanceGroupeKVA
+      if (data.modeSchema === 'unifilaire' || data.modeSchema === 'multifilaire') modeSchema.value = data.modeSchema
+      if (data.typeBatterie === 'gel' || data.typeBatterie === 'agm' || data.typeBatterie === 'lithium') typeBatterie.value = data.typeBatterie
+      if (data.tensionBatterieUnitaire) tensionBatterieUnitaire.value = data.tensionBatterieUnitaire
+      if (data.capaciteBatterieUnitaireAh) capaciteBatterieUnitaireAh.value = data.capaciteBatterieUnitaireAh
       if (data.equipements) equipements.value = data.equipements
       if (data.materiels) materiels.value = data.materiels
       if (data.prixPanneau) prixPanneau.value = data.prixPanneau
@@ -68,7 +80,7 @@ export const useProjectStore = defineStore('project', () => {
 
   // Surveiller les changements
   watch(
-    [systemeSelectionne, prioriteSysteme, paramSite, paramSys, aGroupeElectrogene, puissanceGroupeKVA, equipements, materiels, prixPanneau, prixBatterieKwh, prixOnduleurKVA, isDarkMode],
+    [systemeSelectionne, prioriteSysteme, paramSite, paramSys, aGroupeElectrogene, puissanceGroupeKVA, modeSchema, typeBatterie, tensionBatterieUnitaire, capaciteBatterieUnitaireAh, equipements, materiels, prixPanneau, prixBatterieKwh, prixOnduleurKVA, isDarkMode],
     () => {
       localStorage.setItem('cheffbuild_project', JSON.stringify({
         systemeSelectionne: systemeSelectionne.value,
@@ -77,6 +89,10 @@ export const useProjectStore = defineStore('project', () => {
         paramSys: paramSys.value,
         aGroupeElectrogene: aGroupeElectrogene.value,
         puissanceGroupeKVA: puissanceGroupeKVA.value,
+        modeSchema: modeSchema.value,
+        typeBatterie: typeBatterie.value,
+        tensionBatterieUnitaire: tensionBatterieUnitaire.value,
+        capaciteBatterieUnitaireAh: capaciteBatterieUnitaireAh.value,
         equipements: equipements.value,
         materiels: materiels.value,
         prixPanneau: prixPanneau.value,
@@ -103,10 +119,24 @@ export const useProjectStore = defineStore('project', () => {
     window.location.reload()
   }
 
+  const appliquerCataloguePrix = (catalogue: CataloguePrix) => {
+    prixPanneau.value = catalogue.prixPanneau
+    prixBatterieKwh.value = catalogue.prixBatterieKwh
+    prixOnduleurKVA.value = catalogue.prixOnduleurKVA
+    catalogueMateriels.value = catalogue.materiels.map(materiel => ({ ...materiel }))
+    catalogue.materiels.forEach(materiel => {
+      const ligneProjet = materiels.value.find(ligne => ligne.nom === materiel.nom)
+      if (ligneProjet) ligneProjet.prixUnitaire = materiel.prixUnitaire
+    })
+  }
+
   return {
     systemeSelectionne, prioriteSysteme, paramSite, paramSys, 
     aGroupeElectrogene, puissanceGroupeKVA,
+    modeSchema,
+    typeBatterie, tensionBatterieUnitaire, capaciteBatterieUnitaireAh,
     equipements, materiels, prixPanneau, prixBatterieKwh, prixOnduleurKVA, 
+    catalogueMateriels, appliquerCataloguePrix,
     isDarkMode, toggleDarkMode, resetProjet
   }
 })

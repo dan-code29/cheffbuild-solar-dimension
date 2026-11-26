@@ -24,10 +24,33 @@ export const SolarEngine = {
     return { puissanceRequiseW: Math.round(puissanceRequiseW), nombrePanneaux, puissanceCreteKw: ((nombrePanneaux * paramsSys.puissancePanneau) / 1000).toFixed(2) }
   },
 
-  calculerBatterie(consoJourWh: number, paramsSite: ParametresSite, paramsSys: ParametresSysteme) {
+  calculerBatterie(
+    consoJourWh: number,
+    paramsSite: ParametresSite,
+    paramsSys: ParametresSysteme,
+    tensionBatterieV: number,
+    capaciteBatterieAh: number
+  ) {
     if (consoJourWh === 0) return null
     const capaciteRequiseWh = (consoJourWh * paramsSys.joursAutonomie) / ((paramsSys.profondeurDecharge / 100) * (paramsSys.rendementBatterie / 100))
-    return { capaciteKwh: (capaciteRequiseWh / 1000).toFixed(1), capaciteAh: Math.round(capaciteRequiseWh / paramsSite.tensionSysteme) }
+    const capaciteAh = Math.round(capaciteRequiseWh / paramsSite.tensionSysteme)
+    const configurationCompatible = tensionBatterieV > 0
+      && capaciteBatterieAh > 0
+      && paramsSite.tensionSysteme % tensionBatterieV === 0
+    const batteriesEnSerie = configurationCompatible ? paramsSite.tensionSysteme / tensionBatterieV : null
+    const chainesParalleles = configurationCompatible ? Math.ceil(capaciteAh / capaciteBatterieAh) : null
+    const nombreBatteries = batteriesEnSerie !== null && chainesParalleles !== null
+      ? batteriesEnSerie * chainesParalleles
+      : null
+    return {
+      capaciteKwh: (capaciteRequiseWh / 1000).toFixed(1),
+      capaciteAh,
+      tensionBatterieV,
+      capaciteBatterieAh,
+      batteriesEnSerie,
+      chainesParalleles,
+      nombreBatteries
+    }
   },
 
   calculerOnduleur(puissanceDemarrageMaxW: number) {

@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
+import './style.css'
 
 // 1. On crée l'instance de l'application
 const app = createApp(App)
