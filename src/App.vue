@@ -1,16 +1,25 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { SolarEngine, type Equipement, type ParametresSite, type ParametresSysteme } from './logic/solarEngine'
+import { SolarEngine } from './logic/solarEngine'
+import { useProjectStore } from './stores/projectStore'
 
 // ============================================================================
-// 1. NAVIGATION GLOBALE
+// 1. INITIALISATION DU STORE (Sauvegarde automatique)
+// ============================================================================
+const store = useProjectStore()
+
+// ============================================================================
+// 2. ÉTATS LOCAUX (Navigation et UI uniquement)
 // ============================================================================
 const pageActuelle = ref<'accueil' | 'configurateur'>('accueil')
 const etapeActuelle = ref<number>(1)
 const totalEtapes = 5
 const nomsEtapes = ["Contexte", "Bilan", "Dimensionnement", "Matériel", "Résumé"]
-const systemeSelectionne = ref<string | null>('hybride')
-const prioriteSysteme = ref<'solaire' | 'batterie' | 'reseau'>('solaire')
+const tensionAC = ref(230)
+
+const afficherEtudeTechnique = ref(false)
+const ongletActif = ref('synthese')
+const erreurValidation = ref<string | null>(null)
 
 const optionsSystemes = [
   { id: 'equipements', titre: 'Quelques équipements', description: 'Alimentez uniquement des appareils spécifiques.', icone: '🔌', usage: 'Idéal petit budget' },
@@ -19,63 +28,30 @@ const optionsSystemes = [
 ]
 
 // ============================================================================
-// 2. ÉTATS DES DONNÉES
-// ============================================================================
-const paramSite = ref<ParametresSite>({ 
-  heuresEnsoleillement: 5, tensionSysteme: 48, longueurCableDC: 15, longueurCableAC: 10 
-})
-
-const paramSys = ref<ParametresSysteme>({ 
-  puissancePanneau: 550, rendementSysteme: 75, joursAutonomie: 1, profondeurDecharge: 80, rendementBatterie: 95 
-})
-
-const tensionAC = ref(230)
-
-const equipements = ref<Equipement[]>([
-  { nom: 'Ampoules LED', quantite: 6, puissance: 10, puissanceDemarrage: 10, heures: 5 },
-  { nom: 'Réfrigérateur', quantite: 1, puissance: 150, puissanceDemarrage: 450, heures: 8 }
-])
-
-type Materiel = { nom: string, quantite: number, prixUnitaire: number }
-const materiels = ref<Materiel[]>([
-  { nom: 'Régulateur MPPT', quantite: 1, prixUnitaire: 150000 },
-  { nom: 'Rails de fixation', quantite: 1, prixUnitaire: 50000 },
-  { nom: 'Coffret de protection AC/DC', quantite: 1, prixUnitaire: 75000 }
-])
-
-const prixPanneau = ref<number>(100000)
-const prixBatterieKwh = ref<number>(200000)
-const prixOnduleurKVA = ref<number>(150000)
-
-const afficherEtudeTechnique = ref(false)
-const ongletActif = ref('synthese')
-const erreurValidation = ref<string | null>(null)
-
-// ============================================================================
 // 3. FONCTIONS DE NAVIGATION
 // ============================================================================
 const choisirSysteme = (id: string) => { 
-  systemeSelectionne.value = id
+  store.systemeSelectionne = id
   pageActuelle.value = 'configurateur'
   etapeActuelle.value = 1 
 }
 const revenirAccueil = () => { pageActuelle.value = 'accueil' }
 const allerAEtape = (num: number) => { etapeActuelle.value = num }
 
-const ajouterEquipement = () => equipements.value.push({ nom: '', quantite: 1, puissance: 0, puissanceDemarrage: 0, heures: 0 })
-const supprimerEquipement = (index: number) => equipements.value.splice(index, 1)
+const ajouterEquipement = () => store.equipements.push({ nom: '', quantite: 1, puissance: 0, puissanceDemarrage: 0, heures: 0 })
+const supprimerEquipement = (index: number) => store.equipements.splice(index, 1)
 
-const ajouterMateriel = () => materiels.value.push({ nom: '', quantite: 1, prixUnitaire: 0 })
-const supprimerMateriel = (index: number) => materiels.value.splice(index, 1)
+const ajouterMateriel = () => store.materiels.push({ nom: '', quantite: 1, prixUnitaire: 0 })
+const supprimerMateriel = (index: number) => store.materiels.splice(index, 1)
 
 const validerEtape = () => {
   erreurValidation.value = null
   if (etapeActuelle.value === 2) {
-    if (equipements.value.length === 0) {
+    if (store.equipements.length === 0) {
       erreurValidation.value = "Veuillez ajouter au moins un équipement."
       return false
     }
-    const invalide = equipements.value.some(eq => eq.puissance <= 0 || eq.heures <= 0 || eq.nom.trim() === '')
+    const invalide = store.equipements.some(eq => eq.puissance <= 0 || eq.heures <= 0 || eq.nom.trim() === '')
     if (invalide) {
       erreurValidation.value = "Veuillez remplir tous les champs (Nom, Puissance > 0, Durée > 0)."
       return false
@@ -93,50 +69,50 @@ const etapePrecedente = () => {
 }
 
 // ============================================================================
-// 4. CALCULS REACTIFS
+// 4. CALCULS REACTIFS (utilisant le Store)
 // ============================================================================
-const bilan = computed(() => SolarEngine.calculerBilan(equipements.value))
-const dimensionnementPV = computed(() => SolarEngine.calculerPV(bilan.value.consoJourWh, paramSite.value, paramSys.value))
-const dimensionnementBatterie = computed(() => SolarEngine.calculerBatterie(bilan.value.consoJourWh, paramSite.value, paramSys.value))
+const bilan = computed(() => SolarEngine.calculerBilan(store.equipements))
+const dimensionnementPV = computed(() => SolarEngine.calculerPV(bilan.value.consoJourWh, store.paramSite, store.paramSys))
+const dimensionnementBatterie = computed(() => SolarEngine.calculerBatterie(bilan.value.consoJourWh, store.paramSite, store.paramSys))
 const dimensionnementOnduleur = computed(() => SolarEngine.calculerOnduleur(bilan.value.puissanceDemarrageMaxW))
-const alertes = computed(() => SolarEngine.verifierInstallation(dimensionnementPV.value, dimensionnementBatterie.value, dimensionnementOnduleur.value, paramSite.value))
+const alertes = computed(() => SolarEngine.verifierInstallation(dimensionnementPV.value, dimensionnementBatterie.value, dimensionnementOnduleur.value, store.paramSite))
 
 const cablageDC = computed(() => {
   if (!dimensionnementPV.value) return null
-  const courant = (parseFloat(dimensionnementPV.value.puissanceCreteKw) * 1000) / paramSite.value.tensionSysteme
-  return SolarEngine.calculerSectionCable(paramSite.value.longueurCableDC, courant, paramSite.value.tensionSysteme)
+  const courant = (parseFloat(dimensionnementPV.value.puissanceCreteKw) * 1000) / store.paramSite.tensionSysteme
+  return SolarEngine.calculerSectionCable(store.paramSite.longueurCableDC, courant, store.paramSite.tensionSysteme)
 })
 
 const cablageAC = computed(() => {
   if (!dimensionnementOnduleur.value) return null
   const puissanceVA = parseFloat(dimensionnementOnduleur.value.puissanceRequiseVA.toString())
-  return SolarEngine.calculerCableAC(puissanceVA, tensionAC.value, paramSite.value.longueurCableAC)
+  return SolarEngine.calculerCableAC(puissanceVA, tensionAC.value, store.paramSite.longueurCableAC)
 })
 
 const protections = computed(() => {
   if (!dimensionnementOnduleur.value || !dimensionnementPV.value) return null
   const puissanceVA = parseFloat(dimensionnementOnduleur.value.puissanceRequiseVA.toString())
-  const courantPV = (parseFloat(dimensionnementPV.value.puissanceCreteKw) * 1000) / paramSite.value.tensionSysteme
+  const courantPV = (parseFloat(dimensionnementPV.value.puissanceCreteKw) * 1000) / store.paramSite.tensionSysteme
   return SolarEngine.calculerProtections(puissanceVA, tensionAC.value, courantPV)
 })
 
 const strings = computed(() => {
   if (!dimensionnementPV.value) return null
-  return SolarEngine.calculerStrings(dimensionnementPV.value.nombrePanneaux, paramSite.value.tensionSysteme)
+  return SolarEngine.calculerStrings(dimensionnementPV.value.nombrePanneaux, store.paramSite.tensionSysteme)
 })
 
 const budget = computed(() => {
   if (!dimensionnementPV.value || !dimensionnementBatterie.value || !dimensionnementOnduleur.value) return null
-  const coutPanneaux = dimensionnementPV.value.nombrePanneaux * prixPanneau.value
-  const coutBatteries = Math.ceil(parseFloat(dimensionnementBatterie.value.capaciteKwh) * 10) / 10 * prixBatterieKwh.value
-  const coutOnduleur = Math.max(300000, parseFloat(dimensionnementOnduleur.value.puissanceRequiseKVA) * prixOnduleurKVA.value)
+  const coutPanneaux = dimensionnementPV.value.nombrePanneaux * store.prixPanneau
+  const coutBatteries = Math.ceil(parseFloat(dimensionnementBatterie.value.capaciteKwh) * 10) / 10 * store.prixBatterieKwh
+  const coutOnduleur = Math.max(300000, parseFloat(dimensionnementOnduleur.value.puissanceRequiseKVA) * store.prixOnduleurKVA)
   let coutMat = 0
-  materiels.value.forEach(m => { coutMat += (m.quantite * m.prixUnitaire) })
+  store.materiels.forEach(m => { coutMat += (m.quantite * m.prixUnitaire) })
   return { panneaux: coutPanneaux, batteries: coutBatteries, onduleur: coutOnduleur, materiels: coutMat, total: coutPanneaux + coutBatteries + coutOnduleur + coutMat }
 })
 
 // ============================================================================
-// 5. OUTILS (Formatage, Export PDF via impression)
+// 5. OUTILS (Formatage, Export PDF)
 // ============================================================================
 const formatFCFA = (valeur: number) => {
   return new Intl.NumberFormat('fr-FR', { style: 'decimal', maximumFractionDigits: 0 }).format(valeur) + ' FCFA'
@@ -144,19 +120,15 @@ const formatFCFA = (valeur: number) => {
 
 const genererDevis = () => {
   if (!budget.value) return
-
-  // On récupère le contenu HTML du modèle
   const modeleHTML = document.getElementById('modele-pdf')?.innerHTML
   if (!modeleHTML) return
 
-  // On ouvre une nouvelle fenêtre
   const fenetre = window.open('', '_blank')
   if (!fenetre) {
     alert("Veuillez autoriser les pop-ups pour générer le devis.")
     return
   }
 
-  // On écrit le contenu avec des styles d'impression propres
   fenetre.document.write(`
     <!DOCTYPE html>
     <html lang="fr">
@@ -192,7 +164,6 @@ const genererDevis = () => {
   `)
   fenetre.document.close()
   
-  // On attend le chargement pour lancer l'impression
   fenetre.onload = () => {
     fenetre.focus()
     fenetre.print()
@@ -219,6 +190,13 @@ const genererDevis = () => {
             <button class="btn-choisir">Configurer</button>
           </div>
         </div>
+        
+        <!-- Bouton de réinitialisation (Sécurité) -->
+        <div style="text-align: center; margin-top: 3rem;">
+          <button @click="store.resetProjet()" style="background:none; border:none; color:#999; cursor:pointer; text-decoration:underline; font-size: 0.9rem;">
+            Effacer le projet actuel et recommencer
+          </button>
+        </div>
       </main>
     </div>
 
@@ -243,28 +221,28 @@ const genererDevis = () => {
           <h2>Étape 1 : Contexte & Site</h2>
           <div class="grid-params">
             <div class="form-group">
-              <label>Ensoleillement : {{ paramSite.heuresEnsoleillement }} h/j</label>
-              <input type="range" v-model.number="paramSite.heuresEnsoleillement" min="2" max="8" step="0.5" />
+              <label>Ensoleillement : {{ store.paramSite.heuresEnsoleillement }} h/j</label>
+              <input type="range" v-model.number="store.paramSite.heuresEnsoleillement" min="2" max="8" step="0.5" />
             </div>
             <div class="form-group">
               <label>Tension Bus DC :</label>
-              <select v-model.number="paramSite.tensionSysteme" class="select-input">
+              <select v-model.number="store.paramSite.tensionSysteme" class="select-input">
                 <option :value="12">12 V (Petit)</option>
                 <option :value="24">24 V (Moyen)</option>
                 <option :value="48">48 V (Recommandé)</option>
               </select>
             </div>
             <div class="form-group">
-              <label>Longueur câble DC (m) :</label>
-              <input type="number" v-model.number="paramSite.longueurCableDC" min="1" class="select-input" />
+              <label>Longueur câble Panneaux → Régulateur (m) :</label>
+              <input type="number" v-model.number="store.paramSite.longueurCableDC" min="1" class="select-input" />
             </div>
           </div>
-          <div class="form-group" v-if="systemeSelectionne === 'hybride'">
+          <div class="form-group" v-if="store.systemeSelectionne === 'hybride'">
             <label>Priorité de fonctionnement :</label>
             <div class="radio-group" style="display: flex; flex-direction: column; gap: 0.5rem;">
-              <label><input type="radio" value="solaire" v-model="prioriteSysteme" /> ☀️ Solaire en priorité</label>
-              <label><input type="radio" value="batterie" v-model="prioriteSysteme" /> 🔋 Batterie en priorité</label>
-              <label><input type="radio" value="reseau" v-model="prioriteSysteme" /> 🔌 Réseau en priorité</label>
+              <label><input type="radio" value="solaire" v-model="store.prioriteSysteme" /> ☀️ Solaire en priorité (Économie maximale)</label>
+              <label><input type="radio" value="batterie" v-model="store.prioriteSysteme" /> 🔋 Batterie en priorité (Autonomie)</label>
+              <label><input type="radio" value="reseau" v-model="store.prioriteSysteme" /> 🔌 Réseau en priorité (Sécurité d'alimentation)</label>
             </div>
           </div>
         </section>
@@ -272,12 +250,12 @@ const genererDevis = () => {
         <!-- ÉTAPE 2 -->
         <section v-if="etapeActuelle === 2" class="card fade-in">
           <h2>Étape 2 : Bilan Énergétique</h2>
-          <p class="help-text">N'oubliez pas la puissance de démarrage pour les moteurs.</p>
+          <p class="help-text">N'oubliez pas la puissance de démarrage pour les moteurs (frigo, pompe).</p>
           <div class="table-responsive">
             <table class="tableau-equipements">
               <thead><tr><th>Équipement</th><th>Qté</th><th>Puiss. (W)</th><th>Démarrage (W)</th><th>Durée (h/j)</th><th>Total (Wh/j)</th><th></th></tr></thead>
               <tbody>
-                <tr v-for="(eq, index) in equipements" :key="index">
+                <tr v-for="(eq, index) in store.equipements" :key="index">
                   <td><input type="text" v-model="eq.nom" /></td>
                   <td><input type="number" v-model.number="eq.quantite" min="1" /></td>
                   <td><input type="number" v-model.number="eq.puissance" min="0" /></td>
@@ -301,12 +279,12 @@ const genererDevis = () => {
           <h2>Étape 3 : Dimensionnement</h2>
           <div class="grid-params">
             <div class="form-group">
-              <label>Autonomie : {{ paramSys.joursAutonomie }} jour(s)</label>
-              <input type="range" v-model.number="paramSys.joursAutonomie" min="0" max="5" step="0.5" />
+              <label>Autonomie : {{ store.paramSys.joursAutonomie }} jour(s)</label>
+              <input type="range" v-model.number="store.paramSys.joursAutonomie" min="0" max="5" step="0.5" />
             </div>
             <div class="form-group">
-              <label>Puissance panneau : {{ paramSys.puissancePanneau }} Wc</label>
-              <input type="range" v-model.number="paramSys.puissancePanneau" min="300" max="700" step="10" />
+              <label>Puissance panneau : {{ store.paramSys.puissancePanneau }} Wc</label>
+              <input type="range" v-model.number="store.paramSys.puissancePanneau" min="300" max="700" step="10" />
             </div>
           </div>
           <div class="resultats-dimensionnement" v-if="dimensionnementPV && dimensionnementBatterie && dimensionnementOnduleur">
@@ -323,7 +301,7 @@ const genererDevis = () => {
             <table class="tableau-equipements">
               <thead><tr><th>Désignation</th><th>Qté</th><th>Prix Unitaire (FCFA)</th><th>Total</th><th></th></tr></thead>
               <tbody>
-                <tr v-for="(mat, index) in materiels" :key="index">
+                <tr v-for="(mat, index) in store.materiels" :key="index">
                   <td><input type="text" v-model="mat.nom" /></td>
                   <td><input type="number" v-model.number="mat.quantite" min="1" /></td>
                   <td><input type="number" v-model.number="mat.prixUnitaire" min="0" step="1000" /></td>
@@ -348,10 +326,10 @@ const genererDevis = () => {
             <div class="bloc-recap">
               <h3>Résumé Technique (Client)</h3>
               <p><strong>Énergie :</strong> {{ bilan.consoJourWh }} Wh/jour</p>
-              <p><strong>Panneaux :</strong> {{ dimensionnementPV.nombrePanneaux }} x {{ paramSys.puissancePanneau }}Wc</p>
+              <p><strong>Panneaux :</strong> {{ dimensionnementPV.nombrePanneaux }} x {{ store.paramSys.puissancePanneau }}Wc</p>
               <p><strong>Batteries :</strong> {{ dimensionnementBatterie.capaciteKwh }} kWh</p>
               <p><strong>Onduleur :</strong> {{ dimensionnementOnduleur.puissanceRequiseKVA }} kVA</p>
-              <p v-if="systemeSelectionne === 'hybride'"><strong>Priorité :</strong> {{ prioriteSysteme }}</p>
+              <p v-if="store.systemeSelectionne === 'hybride'"><strong>Priorité :</strong> {{ store.prioriteSysteme }}</p>
               <button class="btn-tech" @click="afficherEtudeTechnique = true">🔍 Voir l'étude technique détaillée</button>
             </div>
             <div class="bloc-recap budget-final">
@@ -421,9 +399,9 @@ const genererDevis = () => {
             <div class="tech-section">
               <h3>Stockage</h3>
               <table class="tech-table">
-                <tr><td>Autonomie</td><td>{{ paramSys.joursAutonomie }} j</td></tr>
-                <tr><td>DoD</td><td>{{ paramSys.profondeurDecharge }} %</td></tr>
-                <tr><td>Tension</td><td>{{ paramSite.tensionSysteme }} V</td></tr>
+                <tr><td>Autonomie</td><td>{{ store.paramSys.joursAutonomie }} j</td></tr>
+                <tr><td>DoD</td><td>{{ store.paramSys.profondeurDecharge }} %</td></tr>
+                <tr><td>Tension</td><td>{{ store.paramSite.tensionSysteme }} V</td></tr>
                 <tr><td>Capacité</td><td>{{ dimensionnementBatterie.capaciteKwh }} kWh ({{ dimensionnementBatterie.capaciteAh }} Ah)</td></tr>
               </table>
             </div>
@@ -432,7 +410,7 @@ const genererDevis = () => {
             <div class="tech-section">
               <h3>Câblage</h3>
               <table class="tech-table">
-                <tr><td>Longueur DC</td><td>{{ paramSite.longueurCableDC }} m</td></tr>
+                <tr><td>Longueur DC</td><td>{{ store.paramSite.longueurCableDC }} m</td></tr>
                 <tr><td>Section DC</td><td>{{ cablageDC.sectionMm2 }} mm²</td></tr>
                 <tr><td>Section AC</td><td>{{ cablageAC?.sectionMm2 }} mm²</td></tr>
               </table>
@@ -469,10 +447,10 @@ const genererDevis = () => {
       <div class="pdf-section">
         <h2>1. Informations du projet</h2>
         <table class="pdf-info-table">
-          <tr><td><strong>Type de système :</strong></td><td>{{ systemeSelectionne }}</td></tr>
-          <tr v-if="systemeSelectionne === 'hybride'"><td><strong>Priorité :</strong></td><td>{{ prioriteSysteme }}</td></tr>
+          <tr><td><strong>Type de système :</strong></td><td>{{ store.systemeSelectionne }}</td></tr>
+          <tr v-if="store.systemeSelectionne === 'hybride'"><td><strong>Priorité :</strong></td><td>{{ store.prioriteSysteme }}</td></tr>
           <tr><td><strong>Énergie journalière :</strong></td><td>{{ bilan.consoJourWh }} Wh/jour</td></tr>
-          <tr><td><strong>Tension bus DC :</strong></td><td>{{ paramSite.tensionSysteme }} V</td></tr>
+          <tr><td><strong>Tension bus DC :</strong></td><td>{{ store.paramSite.tensionSysteme }} V</td></tr>
         </table>
       </div>
 
@@ -482,9 +460,9 @@ const genererDevis = () => {
           <thead><tr><th>Désignation</th><th>Qté</th><th>Prix Unitaire</th><th>Total</th></tr></thead>
           <tbody>
             <tr>
-              <td>Panneaux solaires {{ paramSys.puissancePanneau }} Wc</td>
+              <td>Panneaux solaires {{ store.paramSys.puissancePanneau }} Wc</td>
               <td style="text-align:center;">{{ dimensionnementPV?.nombrePanneaux }}</td>
-              <td style="text-align:right;">{{ formatFCFA(prixPanneau) }}</td>
+              <td style="text-align:right;">{{ formatFCFA(store.prixPanneau) }}</td>
               <td style="text-align:right;">{{ formatFCFA(budget?.panneaux || 0) }}</td>
             </tr>
             <tr>
@@ -499,7 +477,7 @@ const genererDevis = () => {
               <td style="text-align:right;">{{ formatFCFA(budget?.onduleur || 0) }}</td>
               <td style="text-align:right;">{{ formatFCFA(budget?.onduleur || 0) }}</td>
             </tr>
-            <tr v-for="(mat, index) in materiels" :key="index">
+            <tr v-for="(mat, index) in store.materiels" :key="index">
               <td>{{ mat.nom || 'Désignation à préciser' }}</td>
               <td style="text-align:center;">{{ mat.quantite }}</td>
               <td style="text-align:right;">{{ formatFCFA(mat.prixUnitaire) }}</td>
@@ -631,9 +609,7 @@ const genererDevis = () => {
 .btn-tech:hover { background: #1e3a5f; }
 
 /* --- Modèle PDF (Caché de l'écran) --- */
-.pdf-container {
-  display: none; /* Caché, il est extrait via JS pour l'impression */
-}
+.pdf-container { display: none; }
 
 /* --- Animations --- */
 .fade-in { animation: fadeIn 0.3s ease-in-out; }
