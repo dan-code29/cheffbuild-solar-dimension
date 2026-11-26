@@ -1,38 +1,34 @@
 // ============================================================================
 // FICHIER : src/logic/solarEngine.ts
-// RÔLE : Moteur de calcul pur (indépendant de Vue.js)
+// RÔLE : Moteur de calcul pur
 // ============================================================================
 
-// --- DÉFINITION DES TYPES ---
-// Cela permet d'avoir un code robuste et d'éviter les erreurs de frappe.
 export type Equipement = { 
   nom: string
   quantite: number
-  puissance: number          // Puissance nominale en W
-  puissanceDemarrage: number // Puissance au démarrage (pic) en W
-  heures: number             // Utilisation en heures / jour
+  puissance: number
+  puissanceDemarrage: number
+  heures: number
 }
 
 export type ParametresSite = {
-  heuresEnsoleillement: number // Heures de soleil crête (h/j)
-  tensionSysteme: number       // Tension du bus DC (12, 24 ou 48V)
-  longueurCableDC: number      // Longueur des câbles panneaux->régulateur
-  longueurCableAC: number      // Longueur des câbles onduleur->tableau
+  heuresEnsoleillement: number
+  tensionSysteme: number
+  longueurCableDC: number
+  longueurCableAC: number
 }
 
 export type ParametresSysteme = {
-  puissancePanneau: number   // Puissance unitaire d'un panneau (Wc)
-  rendementSysteme: number   // Rendement global (pertes câbles, chaleur, etc.)
-  joursAutonomie: number     // Nombre de jours sans soleil
-  profondeurDecharge: number // DoD (80% pour Lithium, 50% pour Plomb)
-  rendementBatterie: number  // Rendement de charge/décharge (95% Lithium)
+  puissancePanneau: number
+  rendementSysteme: number
+  joursAutonomie: number
+  profondeurDecharge: number
+  rendementBatterie: number
 }
 
-// --- LE MOTEUR ---
 export const SolarEngine = {
   
   // A. BILAN ENERGETIQUE
-  // Calcule ce que l'utilisateur consomme, et surtout, le PIC de puissance.
   calculerBilan(equipements: Equipement[]) {
     let consoJourWh = 0
     let puissanceMaxSimultaneeW = 0
@@ -40,13 +36,8 @@ export const SolarEngine = {
 
     equipements.forEach(eq => {
       if (eq.puissance > 0 && eq.heures > 0) {
-        // Énergie totale (Wh) = Puissance * Quantité * Heures
         consoJourWh += (eq.puissance * eq.quantite * eq.heures)
-        
-        // Puissance si tout s'allume en même temps
         puissanceMaxSimultaneeW += (eq.puissance * eq.quantite)
-        
-        // Le pic de démarrage détermine la taille de l'onduleur
         const demarrageTotal = eq.puissanceDemarrage * eq.quantite
         if (demarrageTotal > puissanceDemarrageMaxW) {
           puissanceDemarrageMaxW = demarrageTotal
@@ -57,25 +48,19 @@ export const SolarEngine = {
     return {
       consoJourWh,
       puissanceMaxSimultaneeW,
-      // On garde la valeur la plus élevée des deux
       puissanceDemarrageMaxW: Math.max(puissanceDemarrageMaxW, puissanceMaxSimultaneeW)
     }
   },
 
-  // B. DIMENSIONNEMENT PHOTOVOLTAÏQUE (Panneaux)
+  // B. DIMENSIONNEMENT PHOTOVOLTAÏQUE
   calculerPV(consoJourWh: number, paramsSite: ParametresSite, paramsSys: ParametresSysteme) {
     if (consoJourWh === 0) return null
-    
-    // Formule : P = E_jour / (Ensoleillement * Rendement)
     const puissanceRequiseW = consoJourWh / (paramsSite.heuresEnsoleillement * (paramsSys.rendementSysteme / 100))
-    
-    // On arrondit au panneau supérieur
     const nombrePanneaux = Math.ceil(puissanceRequiseW / paramsSys.puissancePanneau)
     
     return {
       puissanceRequiseW: Math.round(puissanceRequiseW),
       nombrePanneaux,
-      // Puissance crête réelle installée
       puissanceCreteKw: ((nombrePanneaux * paramsSys.puissancePanneau) / 1000).toFixed(2)
     }
   },
@@ -83,11 +68,8 @@ export const SolarEngine = {
   // C. DIMENSIONNEMENT BATTERIES
   calculerBatterie(consoJourWh: number, paramsSite: ParametresSite, paramsSys: ParametresSysteme) {
     if (consoJourWh === 0) return null
-    
-    // Formule Pro : (Conso * Autonomie) / (Profondeur de décharge * Rendement batterie)
     const capaciteRequiseWh = (consoJourWh * paramsSys.joursAutonomie) / 
                               ((paramsSys.profondeurDecharge / 100) * (paramsSys.rendementBatterie / 100))
-    
     const capaciteKwh = capaciteRequiseWh / 1000
     const capaciteAh = capaciteRequiseWh / paramsSite.tensionSysteme
     
@@ -100,8 +82,6 @@ export const SolarEngine = {
   // D. DIMENSIONNEMENT ONDULEUR
   calculerOnduleur(puissanceDemarrageMaxW: number) {
     if (puissanceDemarrageMaxW === 0) return null
-    
-    // L'onduleur doit pouvoir encaisser le pic de démarrage + une marge de 20%
     const puissanceOnduleurRequiseVA = puissanceDemarrageMaxW * 1.2 
     
     return {
@@ -110,23 +90,14 @@ export const SolarEngine = {
     }
   },
 
-  // E. CALCUL DU CÂBLAGE
-  // Formule : Section = (rho * 2 * Longueur * Courant) / Chute de tension max
+  // E. CALCUL DU CÂBLAGE DC
   calculerSectionCable(longueurM: number, courantA: number, tensionV: number, chuteMaxPct: number = 3) {
     if (courantA === 0 || longueurM === 0) return { sectionMm2: 0, chuteTension: 0 }
-    
-    const rhoCuivre = 0.01724 // Résistivité du cuivre en Ohm.mm²/m
-    const chuteTensionMaxV = tensionV * (chuteMaxPct / 100) // Ex: 3% de 48V = 1.44V
-    
-    // Section théorique minimale
+    const rhoCuivre = 0.01724 
+    const chuteTensionMaxV = tensionV * (chuteMaxPct / 100) 
     const sectionTheorique = (rhoCuivre * 2 * longueurM * courantA) / chuteTensionMaxV
-    
-    // Sections normalisées du commerce (mm²)
     const sectionsStandard = [1.5, 2.5, 4, 6, 10, 16, 25, 35, 50, 70, 95, 120]
-    // On choisit la première section supérieure ou égale à la section théorique
     const sectionRetenue = sectionsStandard.find(s => s >= sectionTheorique) || sectionsStandard[sectionsStandard.length - 1]
-    
-    // On vérifie la chute de tension réelle avec la section normalisée
     const chuteReelle = (rhoCuivre * 2 * longueurM * courantA) / sectionRetenue
 
     return {
@@ -135,26 +106,74 @@ export const SolarEngine = {
     }
   },
 
-  // F. MOTEUR D'ALERTES ET DE SÉCURITÉ
+  // F. CALCUL DU CÂBLAGE AC
+  calculerCableAC(puissanceOnduleurVA: number, tensionAC: number, longueurM: number) {
+    if (puissanceOnduleurVA === 0 || longueurM === 0) return { sectionMm2: 0, courantA: 0, chuteTension: 0 }
+    const courantA = puissanceOnduleurVA / tensionAC
+    const rhoCuivre = 0.01724 
+    const chuteMaxPct = 3 
+    const chuteTensionMaxV = tensionAC * (chuteMaxPct / 100)
+    const sectionTheorique = (rhoCuivre * 2 * longueurM * courantA) / chuteTensionMaxV
+    const sectionsStandard = [1.5, 2.5, 4, 6, 10, 16, 25, 35, 50]
+    const sectionRetenue = sectionsStandard.find(s => s >= sectionTheorique) || 50
+
+    return {
+      courantA: courantA.toFixed(1),
+      sectionMm2: sectionRetenue,
+      chuteTension: ((rhoCuivre * 2 * longueurM * courantA) / sectionRetenue).toFixed(2)
+    }
+  },
+
+  // G. CALCUL DES PROTECTIONS
+  calculerProtections(puissanceOnduleurVA: number, tensionAC: number, courantPV: number) {
+    const courantAC = puissanceOnduleurVA / tensionAC
+    const calibresAC = [16, 20, 25, 32, 40, 50, 63]
+    const disjoncteurAC = calibresAC.find(c => c >= courantAC * 1.25) || 63
+
+    const calibresDC = [10, 15, 20, 25, 30, 40, 50, 63]
+    const fusibleDC = calibresDC.find(c => c >= courantPV * 1.25) || 63
+
+    return {
+      disjoncteurAC: disjoncteurAC + ' A',
+      fusibleDC: fusibleDC + ' A'
+    }
+  },
+
+  // H. CONFIGURATION DES STRINGS
+  calculerStrings(nombrePanneaux: number, tensionSysteme: number) {
+    const vocPanneau = 49.5
+    const vmpPanneau = 41.5
+    const iscPanneau = 14
+    const tensionMaxMPPT = 150 
+    
+    const maxSerie = Math.floor(tensionMaxMPPT / vocPanneau)
+    let panneauxParSerie = Math.floor((tensionSysteme * 2) / vmpPanneau)
+    if (panneauxParSerie > maxSerie) panneauxParSerie = maxSerie
+    if (panneauxParSerie < 1) panneauxParSerie = 1
+
+    const nombreChaines = Math.ceil(nombrePanneaux / panneauxParSerie)
+
+    return {
+      panneauxParSerie,
+      nombreChaines,
+      tensionVocString: (panneauxParSerie * vocPanneau).toFixed(1),
+      courantTotal: (nombreChaines * iscPanneau).toFixed(1),
+      avertissement: panneauxParSerie * vocPanneau > tensionMaxMPPT ? "Danger : Voc dépasse la limite MPPT" : null
+    }
+  },
+
+  // I. MOTEUR D'ALERTES ET DE SÉCURITÉ
   verifierInstallation(pv: any, bat: any, onduleur: any, site: ParametresSite) {
     const alertes: { type: 'danger'|'warning', msg: string }[] = []
     if (!pv || !bat || !onduleur) return alertes
 
-    // Règle 1 : Un onduleur puissant nécessite une tension de bus élevée
     if (site.tensionSysteme < 48 && parseInt(onduleur.puissanceRequiseKVA) > 3) {
-      alertes.push({ 
-        type: 'danger', 
-        msg: "Système en 12V ou 24V inadapté pour un onduleur > 3kVA. Risque de courants excessifs. Passez en 48V." 
-      })
+      alertes.push({ type: 'danger', msg: "Système en 12V/24V inadapté pour un onduleur > 3kVA. Passez en 48V." })
     }
 
-    // Règle 2 : Le courant de charge ne doit pas dépasser les limites du BMS
     const courantChargeMax = (pv.nombrePanneaux * 550) / site.tensionSysteme 
     if (courantChargeMax > 100) {
-      alertes.push({ 
-        type: 'warning', 
-        msg: `Courant de charge élevé (${Math.round(courantChargeMax)}A). Vérifiez les limites de votre BMS de batterie.` 
-      })
+      alertes.push({ type: 'warning', msg: `Courant de charge élevé (${Math.round(courantChargeMax)}A). Vérifiez les limites du BMS.` })
     }
 
     return alertes

@@ -1,10 +1,4 @@
-<!-- ============================================================================
-     FICHIER : src/App.vue
-     RÔLE : Interface utilisateur du configurateur CheffBuild Solar
-============================================================================= -->
-
 <script setup lang="ts">
-// --- IMPORTS ---
 import { ref, computed } from 'vue'
 import { SolarEngine, type Equipement, type ParametresSite, type ParametresSysteme } from './logic/solarEngine'
 
@@ -16,8 +10,8 @@ const etapeActuelle = ref<number>(1)
 const totalEtapes = 5
 const nomsEtapes = ["Contexte", "Bilan", "Dimensionnement", "Matériel", "Résumé"]
 const systemeSelectionne = ref<string | null>('hybride')
+const prioriteSysteme = ref<'solaire' | 'batterie' | 'reseau'>('solaire')
 
-// Options affichées sur la page d'accueil
 const optionsSystemes = [
   { id: 'equipements', titre: 'Quelques équipements', description: 'Alimentez uniquement des appareils spécifiques.', icone: '🔌', usage: 'Idéal petit budget' },
   { id: 'hybride', titre: 'Système hybride', description: 'Solaire + réseau + batterie.', icone: '🔄', usage: 'Idéal maison moderne' },
@@ -27,29 +21,21 @@ const optionsSystemes = [
 // ============================================================================
 // 2. ÉTATS DES DONNÉES
 // ============================================================================
-// Paramètres du site et du système
 const paramSite = ref<ParametresSite>({ 
-  heuresEnsoleillement: 5, 
-  tensionSysteme: 48, 
-  longueurCableDC: 15, 
-  longueurCableAC: 10 
+  heuresEnsoleillement: 5, tensionSysteme: 48, longueurCableDC: 15, longueurCableAC: 10 
 })
 
 const paramSys = ref<ParametresSysteme>({ 
-  puissancePanneau: 550, 
-  rendementSysteme: 75, 
-  joursAutonomie: 1, 
-  profondeurDecharge: 80, 
-  rendementBatterie: 95 
+  puissancePanneau: 550, rendementSysteme: 75, joursAutonomie: 1, profondeurDecharge: 80, rendementBatterie: 95 
 })
 
-// Liste des équipements à alimenter
+const tensionAC = ref(230)
+
 const equipements = ref<Equipement[]>([
   { nom: 'Ampoules LED', quantite: 6, puissance: 10, puissanceDemarrage: 10, heures: 5 },
   { nom: 'Réfrigérateur', quantite: 1, puissance: 150, puissanceDemarrage: 450, heures: 8 }
 ])
 
-// Liste du matériel annexe (câbles, coffrets, etc.)
 type Materiel = { nom: string, quantite: number, prixUnitaire: number }
 const materiels = ref<Materiel[]>([
   { nom: 'Régulateur MPPT', quantite: 1, prixUnitaire: 150000 },
@@ -57,14 +43,12 @@ const materiels = ref<Materiel[]>([
   { nom: 'Coffret de protection AC/DC', quantite: 1, prixUnitaire: 75000 }
 ])
 
-// Prix de base (modifiables)
 const prixPanneau = ref<number>(100000)
 const prixBatterieKwh = ref<number>(200000)
 const prixOnduleurKVA = ref<number>(150000)
 
-// États de l'interface
 const afficherEtudeTechnique = ref(false)
-const ongletActif = ref('synthese') // Gère les onglets de la modale technique
+const ongletActif = ref('synthese')
 const erreurValidation = ref<string | null>(null)
 
 // ============================================================================
@@ -75,117 +59,147 @@ const choisirSysteme = (id: string) => {
   pageActuelle.value = 'configurateur'
   etapeActuelle.value = 1 
 }
-
 const revenirAccueil = () => { pageActuelle.value = 'accueil' }
 const allerAEtape = (num: number) => { etapeActuelle.value = num }
 
-// Ajout / Suppression d'équipements
 const ajouterEquipement = () => equipements.value.push({ nom: '', quantite: 1, puissance: 0, puissanceDemarrage: 0, heures: 0 })
 const supprimerEquipement = (index: number) => equipements.value.splice(index, 1)
 
-// Ajout / Suppression de matériel
 const ajouterMateriel = () => materiels.value.push({ nom: '', quantite: 1, prixUnitaire: 0 })
 const supprimerMateriel = (index: number) => materiels.value.splice(index, 1)
 
-// ============================================================================
-// 4. VALIDATION ET PASSAGE D'ÉTAPE
-// ============================================================================
 const validerEtape = () => {
   erreurValidation.value = null
-
-  // Règles pour l'étape 2 (Bilan Énergétique)
   if (etapeActuelle.value === 2) {
     if (equipements.value.length === 0) {
       erreurValidation.value = "Veuillez ajouter au moins un équipement."
       return false
     }
-    // On vérifie que chaque ligne est remplie correctement
     const invalide = equipements.value.some(eq => eq.puissance <= 0 || eq.heures <= 0 || eq.nom.trim() === '')
     if (invalide) {
       erreurValidation.value = "Veuillez remplir tous les champs (Nom, Puissance > 0, Durée > 0)."
       return false
     }
   }
-
   return true
 }
 
 const etapeSuivante = () => { 
-  // On ne passe à l'étape suivante QUE si la validation réussit
-  if (validerEtape() && etapeActuelle.value < totalEtapes) {
-    etapeActuelle.value++ 
-  }
+  if (validerEtape() && etapeActuelle.value < totalEtapes) etapeActuelle.value++ 
 }
 
 const etapePrecedente = () => { 
-  if (etapeActuelle.value > 1) {
-    erreurValidation.value = null // On efface l'erreur si on recule
-    etapeActuelle.value-- 
-  }
+  if (etapeActuelle.value > 1) { erreurValidation.value = null; etapeActuelle.value-- }
 }
 
 // ============================================================================
-// 5. CALCULS REACTIFS (Utilisation du moteur)
+// 4. CALCULS REACTIFS
 // ============================================================================
-// Dès qu'une donnée change, ces variables se recalculent automatiquement.
 const bilan = computed(() => SolarEngine.calculerBilan(equipements.value))
 const dimensionnementPV = computed(() => SolarEngine.calculerPV(bilan.value.consoJourWh, paramSite.value, paramSys.value))
 const dimensionnementBatterie = computed(() => SolarEngine.calculerBatterie(bilan.value.consoJourWh, paramSite.value, paramSys.value))
 const dimensionnementOnduleur = computed(() => SolarEngine.calculerOnduleur(bilan.value.puissanceDemarrageMaxW))
 const alertes = computed(() => SolarEngine.verifierInstallation(dimensionnementPV.value, dimensionnementBatterie.value, dimensionnementOnduleur.value, paramSite.value))
 
-// Calcul du câblage DC
 const cablageDC = computed(() => {
   if (!dimensionnementPV.value) return null
-  // Intensité = Puissance / Tension
   const courant = (parseFloat(dimensionnementPV.value.puissanceCreteKw) * 1000) / paramSite.value.tensionSysteme
   return SolarEngine.calculerSectionCable(paramSite.value.longueurCableDC, courant, paramSite.value.tensionSysteme)
 })
 
-// Calcul du budget total
+const cablageAC = computed(() => {
+  if (!dimensionnementOnduleur.value) return null
+  const puissanceVA = parseFloat(dimensionnementOnduleur.value.puissanceRequiseVA.toString())
+  return SolarEngine.calculerCableAC(puissanceVA, tensionAC.value, paramSite.value.longueurCableAC)
+})
+
+const protections = computed(() => {
+  if (!dimensionnementOnduleur.value || !dimensionnementPV.value) return null
+  const puissanceVA = parseFloat(dimensionnementOnduleur.value.puissanceRequiseVA.toString())
+  const courantPV = (parseFloat(dimensionnementPV.value.puissanceCreteKw) * 1000) / paramSite.value.tensionSysteme
+  return SolarEngine.calculerProtections(puissanceVA, tensionAC.value, courantPV)
+})
+
+const strings = computed(() => {
+  if (!dimensionnementPV.value) return null
+  return SolarEngine.calculerStrings(dimensionnementPV.value.nombrePanneaux, paramSite.value.tensionSysteme)
+})
+
 const budget = computed(() => {
   if (!dimensionnementPV.value || !dimensionnementBatterie.value || !dimensionnementOnduleur.value) return null
-  
   const coutPanneaux = dimensionnementPV.value.nombrePanneaux * prixPanneau.value
-  // On arrondit la capacité batterie à 0.1 kWh près pour le calcul du prix
   const coutBatteries = Math.ceil(parseFloat(dimensionnementBatterie.value.capaciteKwh) * 10) / 10 * prixBatterieKwh.value
   const coutOnduleur = Math.max(300000, parseFloat(dimensionnementOnduleur.value.puissanceRequiseKVA) * prixOnduleurKVA.value)
-  
   let coutMat = 0
   materiels.value.forEach(m => { coutMat += (m.quantite * m.prixUnitaire) })
-
-  return { 
-    panneaux: coutPanneaux, 
-    batteries: coutBatteries, 
-    onduleur: coutOnduleur, 
-    materiels: coutMat, 
-    total: coutPanneaux + coutBatteries + coutOnduleur + coutMat 
-  }
+  return { panneaux: coutPanneaux, batteries: coutBatteries, onduleur: coutOnduleur, materiels: coutMat, total: coutPanneaux + coutBatteries + coutOnduleur + coutMat }
 })
 
 // ============================================================================
-// 6. OUTILS (Formatage, Export)
+// 5. OUTILS (Formatage, Export PDF via impression)
 // ============================================================================
 const formatFCFA = (valeur: number) => {
   return new Intl.NumberFormat('fr-FR', { style: 'decimal', maximumFractionDigits: 0 }).format(valeur) + ' FCFA'
 }
 
-const telechargerDevis = () => {
+const genererDevis = () => {
   if (!budget.value) return
-  let contenu = `DEVIS CHEFFBUILD SOLAR\n======================\n\nTotal Estimé : ${formatFCFA(budget.value.total)}\n`
-  const blob = new Blob([contenu], { type: 'text/plain;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `Devis_CheffBuild.txt`
-  link.click()
-  URL.revokeObjectURL(url)
+
+  // On récupère le contenu HTML du modèle
+  const modeleHTML = document.getElementById('modele-pdf')?.innerHTML
+  if (!modeleHTML) return
+
+  // On ouvre une nouvelle fenêtre
+  const fenetre = window.open('', '_blank')
+  if (!fenetre) {
+    alert("Veuillez autoriser les pop-ups pour générer le devis.")
+    return
+  }
+
+  // On écrit le contenu avec des styles d'impression propres
+  fenetre.document.write(`
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head>
+      <meta charset="UTF-8">
+      <title>Devis CheffBuild Solar</title>
+      <style>
+        body { font-family: Arial, sans-serif; color: #000; padding: 20px; max-width: 800px; margin: 0 auto; }
+        .pdf-header { text-align: center; border-bottom: 3px solid #0066FF; padding-bottom: 15px; margin-bottom: 25px; }
+        .pdf-header h1 { color: #0A2540; margin: 0; font-size: 28px; }
+        .pdf-header p { margin: 5px 0; font-size: 14px; color: #555; }
+        .pdf-date { font-size: 12px !important; color: #888 !important; margin-top: 10px !important; }
+        .pdf-section { margin-bottom: 25px; }
+        .pdf-section h2 { font-size: 16px; border-bottom: 1px solid #ddd; padding-bottom: 5px; color: #0066FF; margin-bottom: 10px; }
+        .pdf-info-table { width: 100%; font-size: 13px; margin-bottom: 15px; }
+        .pdf-info-table td { padding: 4px 0; }
+        .pdf-info-table td:first-child { width: 40%; color: #555; }
+        .pdf-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
+        .pdf-table th { background-color: #f0f4f8; padding: 10px 8px; border: 1px solid #ccc; text-align: left; }
+        .pdf-table td { padding: 8px; border: 1px solid #ddd; vertical-align: top; }
+        .pdf-table tfoot .pdf-total td { background-color: #e0f2fe; font-size: 14px; padding: 12px 8px; border-top: 2px solid #0066FF; }
+        .pdf-note { font-size: 11px; color: #666; line-height: 1.5; margin-bottom: 8px; }
+        @media print {
+          body { padding: 0; }
+          @page { margin: 15mm; }
+        }
+      </style>
+    </head>
+    <body>
+      ${modeleHTML}
+    </body>
+    </html>
+  `)
+  fenetre.document.close()
+  
+  // On attend le chargement pour lancer l'impression
+  fenetre.onload = () => {
+    fenetre.focus()
+    fenetre.print()
+  }
 }
 </script>
 
-<!-- ============================================================================
-     PARTIE TEMPLATE (HTML)
-============================================================================= -->
 <template>
   <div class="app-container">
     
@@ -208,20 +222,15 @@ const telechargerDevis = () => {
       </main>
     </div>
 
-    <!-- ================= CONFIGURATEUR (WIZARD) ================= -->
+    <!-- ================= CONFIGURATEUR ================= -->
     <div v-else-if="pageActuelle === 'configurateur'" class="page-configurateur">
       
-      <!-- Fil d'Ariane (Stepper) -->
       <nav class="stepper">
         <button @click="revenirAccueil" class="btn-retour">← Accueil</button>
         <div class="steps-container">
-          <div 
-            v-for="(nom, index) in nomsEtapes" 
-            :key="index" 
-            class="step-item" 
-            :class="{ 'active': etapeActuelle === index + 1, 'done': etapeActuelle > index + 1 }" 
-            @click="allerAEtape(index + 1)"
-          >
+          <div v-for="(nom, index) in nomsEtapes" :key="index" class="step-item" 
+               :class="{ 'active': etapeActuelle === index + 1, 'done': etapeActuelle > index + 1 }" 
+               @click="allerAEtape(index + 1)">
             <div class="step-circle">{{ index + 1 }}</div>
             <span class="step-label">{{ nom }}</span>
           </div>
@@ -229,7 +238,7 @@ const telechargerDevis = () => {
       </nav>
 
       <div class="etape-contenu">
-        <!-- ÉTAPE 1 : Contexte -->
+        <!-- ÉTAPE 1 -->
         <section v-if="etapeActuelle === 1" class="card fade-in">
           <h2>Étape 1 : Contexte & Site</h2>
           <div class="grid-params">
@@ -246,21 +255,27 @@ const telechargerDevis = () => {
               </select>
             </div>
             <div class="form-group">
-              <label>Longueur câble Panneaux → Régulateur (m) :</label>
+              <label>Longueur câble DC (m) :</label>
               <input type="number" v-model.number="paramSite.longueurCableDC" min="1" class="select-input" />
+            </div>
+          </div>
+          <div class="form-group" v-if="systemeSelectionne === 'hybride'">
+            <label>Priorité de fonctionnement :</label>
+            <div class="radio-group" style="display: flex; flex-direction: column; gap: 0.5rem;">
+              <label><input type="radio" value="solaire" v-model="prioriteSysteme" /> ☀️ Solaire en priorité</label>
+              <label><input type="radio" value="batterie" v-model="prioriteSysteme" /> 🔋 Batterie en priorité</label>
+              <label><input type="radio" value="reseau" v-model="prioriteSysteme" /> 🔌 Réseau en priorité</label>
             </div>
           </div>
         </section>
 
-        <!-- ÉTAPE 2 : Bilan Énergétique -->
+        <!-- ÉTAPE 2 -->
         <section v-if="etapeActuelle === 2" class="card fade-in">
           <h2>Étape 2 : Bilan Énergétique</h2>
-          <p class="help-text">N'oubliez pas la puissance de démarrage pour les moteurs (frigo, pompe).</p>
+          <p class="help-text">N'oubliez pas la puissance de démarrage pour les moteurs.</p>
           <div class="table-responsive">
             <table class="tableau-equipements">
-              <thead>
-                <tr><th>Équipement</th><th>Qté</th><th>Puiss. (W)</th><th>Démarrage (W)</th><th>Durée (h/j)</th><th>Total (Wh/j)</th><th></th></tr>
-              </thead>
+              <thead><tr><th>Équipement</th><th>Qté</th><th>Puiss. (W)</th><th>Démarrage (W)</th><th>Durée (h/j)</th><th>Total (Wh/j)</th><th></th></tr></thead>
               <tbody>
                 <tr v-for="(eq, index) in equipements" :key="index">
                   <td><input type="text" v-model="eq.nom" /></td>
@@ -281,7 +296,7 @@ const telechargerDevis = () => {
           </div>
         </section>
 
-        <!-- ÉTAPE 3 : Dimensionnement -->
+        <!-- ÉTAPE 3 -->
         <section v-if="etapeActuelle === 3" class="card fade-in">
           <h2>Étape 3 : Dimensionnement</h2>
           <div class="grid-params">
@@ -301,7 +316,7 @@ const telechargerDevis = () => {
           </div>
         </section>
 
-        <!-- ÉTAPE 4 : Matériel -->
+        <!-- ÉTAPE 4 -->
         <section v-if="etapeActuelle === 4" class="card fade-in">
           <h2>Étape 4 : Matériel Annexe</h2>
           <div class="table-responsive">
@@ -321,14 +336,12 @@ const telechargerDevis = () => {
           <button @click="ajouterMateriel" class="btn-ajouter">+ Ajouter</button>
         </section>
 
-        <!-- ÉTAPE 5 : Résumé -->
+        <!-- ÉTAPE 5 -->
         <section v-if="etapeActuelle === 5" class="card fade-in">
           <h2>Étape 5 : Résumé</h2>
           
           <div class="alertes-container" v-if="alertes.length > 0">
-            <div v-for="(alerte, i) in alertes" :key="i" :class="['alerte', alerte.type]">
-              {{ alerte.msg }}
-            </div>
+            <div v-for="(alerte, i) in alertes" :key="i" :class="['alerte', alerte.type]">{{ alerte.msg }}</div>
           </div>
 
           <div v-if="budget && dimensionnementPV && dimensionnementBatterie && dimensionnementOnduleur" class="recapitulatif">
@@ -338,6 +351,7 @@ const telechargerDevis = () => {
               <p><strong>Panneaux :</strong> {{ dimensionnementPV.nombrePanneaux }} x {{ paramSys.puissancePanneau }}Wc</p>
               <p><strong>Batteries :</strong> {{ dimensionnementBatterie.capaciteKwh }} kWh</p>
               <p><strong>Onduleur :</strong> {{ dimensionnementOnduleur.puissanceRequiseKVA }} kVA</p>
+              <p v-if="systemeSelectionne === 'hybride'"><strong>Priorité :</strong> {{ prioriteSysteme }}</p>
               <button class="btn-tech" @click="afficherEtudeTechnique = true">🔍 Voir l'étude technique détaillée</button>
             </div>
             <div class="bloc-recap budget-final">
@@ -350,25 +364,20 @@ const telechargerDevis = () => {
             </div>
           </div>
           <div class="actions-finales">
-            <button @click="telechargerDevis" class="btn-telecharger">📥 Télécharger le devis</button>
+            <button @click="genererDevis" class="btn-telecharger">📥 Générer le Devis PDF</button>
           </div>
         </section>
       </div>
 
-      <!-- Affichage des erreurs de validation -->
-      <div v-if="erreurValidation" class="alerte danger" style="margin-bottom: 1rem;">
-        ⚠️ {{ erreurValidation }}
-      </div>
+      <div v-if="erreurValidation" class="alerte danger" style="margin-bottom: 1rem;">⚠️ {{ erreurValidation }}</div>
 
-      <!-- Boutons Précédent / Suivant -->
       <div class="navigation-bas">
-        <button v-if="etapeActuelle > 1" @click="etapePrecedente" class="btn-nav btn-prev">← Précédent</button>
-        <div v-else></div>
+        <button v-if="etapeActuelle > 1" @click="etapePrecedente" class="btn-nav btn-prev">← Précédent</button><div v-else></div>
         <button v-if="etapeActuelle < totalEtapes" @click="etapeSuivante" class="btn-nav btn-next">Suivant →</button>
       </div>
     </div>
 
-    <!-- ================= MODALE ÉTUDE TECHNIQUE (ONGLETS) ================= -->
+    <!-- ================= MODALE ÉTUDE TECHNIQUE ================= -->
     <div v-if="afficherEtudeTechnique" class="modal-overlay" @click.self="afficherEtudeTechnique = false">
       <div class="modal-contenu">
         <header class="modal-header">
@@ -376,89 +385,145 @@ const telechargerDevis = () => {
           <button @click="afficherEtudeTechnique = false" class="btn-close">✖</button>
         </header>
         
-        <!-- Menu des Onglets -->
         <div class="modal-tabs">
           <button :class="{ active: ongletActif === 'synthese' }" @click="ongletActif = 'synthese'">Synthèse</button>
-          <button :class="{ active: ongletActif === 'pv' }" @click="ongletActif = 'pv'">Champ PV</button>
+          <button :class="{ active: ongletActif === 'strings' }" @click="ongletActif = 'strings'">Strings</button>
           <button :class="{ active: ongletActif === 'batterie' }" @click="ongletActif = 'batterie'">Batteries</button>
-          <button :class="{ active: ongletActif === 'cablage' }" @click="ongletActif = 'cablage'">Câblage DC</button>
+          <button :class="{ active: ongletActif === 'cablage' }" @click="ongletActif = 'cablage'">Câblage</button>
+          <button :class="{ active: ongletActif === 'protections' }" @click="ongletActif = 'protections'">Protections</button>
           <button :class="{ active: ongletActif === 'alertes' }" @click="ongletActif = 'alertes'">Alertes ({{ alertes.length }})</button>
         </div>
 
-        <div class="modal-body" v-if="dimensionnementPV && dimensionnementBatterie && dimensionnementOnduleur && cablageDC">
-          
-          <!-- Contenu : Synthèse -->
+        <div class="modal-body" v-if="dimensionnementPV && dimensionnementBatterie && dimensionnementOnduleur && cablageDC && protections && strings">
           <div v-if="ongletActif === 'synthese'">
             <div class="tech-section">
-              <h3>Résumé global du système</h3>
+              <h3>Résumé global</h3>
               <table class="tech-table">
-                <tr><td>Consommation journalière</td><td>{{ bilan.consoJourWh }} Wh/j</td></tr>
-                <tr><td>Puissance crête PV</td><td>{{ dimensionnementPV.puissanceCreteKw }} kWc</td></tr>
-                <tr><td>Capacité de stockage</td><td>{{ dimensionnementBatterie.capaciteKwh }} kWh</td></tr>
-                <tr><td>Puissance onduleur</td><td>{{ dimensionnementOnduleur.puissanceRequiseKVA }} kVA</td></tr>
+                <tr><td>Consommation</td><td>{{ bilan.consoJourWh }} Wh/j</td></tr>
+                <tr><td>Puissance crête</td><td>{{ dimensionnementPV.puissanceCreteKw }} kWc</td></tr>
+                <tr><td>Stockage</td><td>{{ dimensionnementBatterie.capaciteKwh }} kWh</td></tr>
+                <tr><td>Onduleur</td><td>{{ dimensionnementOnduleur.puissanceRequiseKVA }} kVA</td></tr>
               </table>
             </div>
           </div>
-
-          <!-- Contenu : Champ PV -->
-          <div v-if="ongletActif === 'pv'">
+          <div v-if="ongletActif === 'strings'">
             <div class="tech-section">
-              <h3>Détails du champ photovoltaïque</h3>
+              <h3>Configuration PV</h3>
               <table class="tech-table">
-                <tr><td>Puissance unitaire panneau</td><td>{{ paramSys.puissancePanneau }} Wc</td></tr>
-                <tr><td>Nombre de panneaux requis</td><td>{{ dimensionnementPV.nombrePanneaux }}</td></tr>
-                <tr><td>Puissance totale installée</td><td>{{ dimensionnementPV.puissanceCreteKw }} kWc</td></tr>
+                <tr><td>Panneaux totaux</td><td>{{ dimensionnementPV.nombrePanneaux }}</td></tr>
+                <tr><td>Panneaux en série</td><td>{{ strings.panneauxParSerie }}</td></tr>
+                <tr><td>Chaînes parallèles</td><td>{{ strings.nombreChaines }}</td></tr>
+                <tr><td>Tension Voc</td><td>{{ strings.tensionVocString }} V</td></tr>
               </table>
             </div>
           </div>
-
-          <!-- Contenu : Batteries -->
           <div v-if="ongletActif === 'batterie'">
             <div class="tech-section">
-              <h3>Détails du stockage</h3>
+              <h3>Stockage</h3>
               <table class="tech-table">
-                <tr><td>Autonomie souhaitée</td><td>{{ paramSys.joursAutonomie }} jour(s)</td></tr>
-                <tr><td>Profondeur de décharge (DoD)</td><td>{{ paramSys.profondeurDecharge }} %</td></tr>
-                <tr><td>Tension du parc</td><td>{{ paramSite.tensionSysteme }} V</td></tr>
-                <tr><td>Capacité utile calculée</td><td>{{ dimensionnementBatterie.capaciteKwh }} kWh ({{ dimensionnementBatterie.capaciteAh }} Ah)</td></tr>
+                <tr><td>Autonomie</td><td>{{ paramSys.joursAutonomie }} j</td></tr>
+                <tr><td>DoD</td><td>{{ paramSys.profondeurDecharge }} %</td></tr>
+                <tr><td>Tension</td><td>{{ paramSite.tensionSysteme }} V</td></tr>
+                <tr><td>Capacité</td><td>{{ dimensionnementBatterie.capaciteKwh }} kWh ({{ dimensionnementBatterie.capaciteAh }} Ah)</td></tr>
               </table>
             </div>
           </div>
-
-          <!-- Contenu : Câblage -->
           <div v-if="ongletActif === 'cablage'">
             <div class="tech-section">
-              <h3>Câblage DC (Panneaux → Régulateur)</h3>
+              <h3>Câblage</h3>
               <table class="tech-table">
-                <tr><td>Longueur estimée</td><td>{{ paramSite.longueurCableDC }} m</td></tr>
-                <tr><td>Courant max</td><td>{{ ((parseFloat(dimensionnementPV.puissanceCreteKw) * 1000) / paramSite.tensionSysteme).toFixed(1) }} A</td></tr>
-                <tr><td>Section de câble recommandée</td><td><strong>{{ cablageDC.sectionMm2 }} mm²</strong></td></tr>
-                <tr><td>Chute de tension calculée</td><td>{{ cablageDC.chuteTension }} V ({{ paramSite.tensionSysteme }} V)</td></tr>
+                <tr><td>Longueur DC</td><td>{{ paramSite.longueurCableDC }} m</td></tr>
+                <tr><td>Section DC</td><td>{{ cablageDC.sectionMm2 }} mm²</td></tr>
+                <tr><td>Section AC</td><td>{{ cablageAC?.sectionMm2 }} mm²</td></tr>
               </table>
             </div>
           </div>
-
-          <!-- Contenu : Alertes -->
-          <div v-if="ongletActif === 'alertes'">
+          <div v-if="ongletActif === 'protections'">
             <div class="tech-section">
-              <h3>Contrôles de sécurité</h3>
-              <div v-if="alertes.length === 0" class="alerte success">✔ Aucun problème majeur détecté.</div>
-              <div v-for="(alerte, i) in alertes" :key="i" :class="['alerte', alerte.type]">
-                ⚠️ {{ alerte.msg }}
-              </div>
+              <h3>Protections</h3>
+              <table class="tech-table">
+                <tr><td>Disjoncteur AC</td><td>{{ protections.disjoncteurAC }}</td></tr>
+                <tr><td>Fusible DC</td><td>{{ protections.fusibleDC }}</td></tr>
+              </table>
             </div>
           </div>
-
+          <div v-if="ongletActif === 'alertes'">
+            <div class="tech-section">
+              <h3>Contrôles</h3>
+              <div v-if="alertes.length === 0" class="alerte success">✔ Aucun problème.</div>
+              <div v-for="(alerte, i) in alertes" :key="i" :class="['alerte', alerte.type]">⚠️ {{ alerte.msg }}</div>
+            </div>
+          </div>
         </div>
+      </div>
+    </div>
+
+    <!-- ================= MODÈLE PDF CACHÉ ================= -->
+    <div id="modele-pdf" class="pdf-container">
+      <header class="pdf-header">
+        <h1>CheffBuild Solar</h1>
+        <p>Devis estimatif détaillé</p>
+        <p class="pdf-date">Émis le : {{ new Date().toLocaleDateString('fr-FR') }}</p>
+      </header>
+
+      <div class="pdf-section">
+        <h2>1. Informations du projet</h2>
+        <table class="pdf-info-table">
+          <tr><td><strong>Type de système :</strong></td><td>{{ systemeSelectionne }}</td></tr>
+          <tr v-if="systemeSelectionne === 'hybride'"><td><strong>Priorité :</strong></td><td>{{ prioriteSysteme }}</td></tr>
+          <tr><td><strong>Énergie journalière :</strong></td><td>{{ bilan.consoJourWh }} Wh/jour</td></tr>
+          <tr><td><strong>Tension bus DC :</strong></td><td>{{ paramSite.tensionSysteme }} V</td></tr>
+        </table>
+      </div>
+
+      <div class="pdf-section">
+        <h2>2. Nomenclature et Chiffrage</h2>
+        <table class="pdf-table">
+          <thead><tr><th>Désignation</th><th>Qté</th><th>Prix Unitaire</th><th>Total</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Panneaux solaires {{ paramSys.puissancePanneau }} Wc</td>
+              <td style="text-align:center;">{{ dimensionnementPV?.nombrePanneaux }}</td>
+              <td style="text-align:right;">{{ formatFCFA(prixPanneau) }}</td>
+              <td style="text-align:right;">{{ formatFCFA(budget?.panneaux || 0) }}</td>
+            </tr>
+            <tr>
+              <td>Stockage batteries ({{ dimensionnementBatterie?.capaciteKwh }} kWh)</td>
+              <td style="text-align:center;">1</td>
+              <td style="text-align:right;">{{ formatFCFA(budget?.batteries || 0) }}</td>
+              <td style="text-align:right;">{{ formatFCFA(budget?.batteries || 0) }}</td>
+            </tr>
+            <tr>
+              <td>Onduleur hybride {{ dimensionnementOnduleur?.puissanceRequiseKVA }} kVA</td>
+              <td style="text-align:center;">1</td>
+              <td style="text-align:right;">{{ formatFCFA(budget?.onduleur || 0) }}</td>
+              <td style="text-align:right;">{{ formatFCFA(budget?.onduleur || 0) }}</td>
+            </tr>
+            <tr v-for="(mat, index) in materiels" :key="index">
+              <td>{{ mat.nom || 'Désignation à préciser' }}</td>
+              <td style="text-align:center;">{{ mat.quantite }}</td>
+              <td style="text-align:right;">{{ formatFCFA(mat.prixUnitaire) }}</td>
+              <td style="text-align:right;">{{ formatFCFA(mat.prixUnitaire * mat.quantite) }}</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr class="pdf-total">
+              <td colspan="3"><strong>MONTANT TOTAL ESTIMÉ (FCFA)</strong></td>
+              <td style="text-align:right;"><strong>{{ formatFCFA(budget?.total || 0) }}</strong></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div class="pdf-section">
+        <h2>3. Réserves</h2>
+        <p class="pdf-note">Cette estimation est une pré-étude non contractuelle. Les quantités et les prix sont donnés à titre indicatif et doivent être validés sur site.</p>
       </div>
     </div>
 
   </div>
 </template>
 
-<!-- ============================================================================
-     PARTIE STYLES (CSS)
-============================================================================= -->
 <style scoped>
 /* --- Styles globaux --- */
 .app-container { max-width: 1000px; margin: 0 auto; padding: 2rem; font-family: system-ui, -apple-system, sans-serif; color: #333; min-height: 100vh; }
@@ -564,6 +629,11 @@ const telechargerDevis = () => {
 .tech-table td:first-child { font-weight: 600; color: #555; width: 50%; }
 .btn-tech { background: #0A2540; color: white; border: none; padding: 0.6rem 1rem; border-radius: 6px; margin-top: 1rem; cursor: pointer; font-weight: bold; width: 100%; }
 .btn-tech:hover { background: #1e3a5f; }
+
+/* --- Modèle PDF (Caché de l'écran) --- */
+.pdf-container {
+  display: none; /* Caché, il est extrait via JS pour l'impression */
+}
 
 /* --- Animations --- */
 .fade-in { animation: fadeIn 0.3s ease-in-out; }
