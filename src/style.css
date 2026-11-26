@@ -1,0 +1,41 @@
+/* src/style.css */
+:root {
+  --bg-color: #F5F7FA;
+  --text-color: #333;
+  --card-bg: #ffffff;
+  --border-color: #eee;
+  --input-bg: #ffffff;
+  --input-border: #ccc;
+  --modal-bg: #ffffff;
+}
+
+[data-theme="dark"] {
+  --bg-color: #121212;
+  --text-color: #e0e0e0;
+  --card-bg: #1e1e1e;
+  --border-color: #333;
+  --input-bg: #2d2d2d;
+  --input-border: #444;
+  --modal-bg: #1e1e1e;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  margin: 0;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+/* On force les inputs et selects à utiliser les variables */
+input, select, textarea {
+  background-color: var(--input-bg) !important;
+  color: var(--text-color) !important;
+  border: 1px solid var(--input-border) !important;
+}
+
+/* On force les fonds des cartes */
+.card, .carte-option, .modal-contenu, .bloc-recap {
+  background-color: var(--card-bg) !important;
+  color: var(--text-color) !important;
+  border-color: var(--border-color) !important;
+}

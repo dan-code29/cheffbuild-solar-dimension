@@ -2,62 +2,44 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 
-// --- TYPES ---
 export type Equipement = { nom: string, quantite: number, puissance: number, puissanceDemarrage: number, heures: number }
 export type Materiel = { nom: string, quantite: number, prixUnitaire: number }
 
 export const useProjectStore = defineStore('project', () => {
   
-  // ==========================================
-  // 1. DONNÉES DU PROJET
-  // ==========================================
+  // --- ÉTATS DU PROJET ---
   const systemeSelectionne = ref<string | null>('hybride')
   const prioriteSysteme = ref<'solaire' | 'batterie' | 'reseau'>('solaire')
   
-  // Paramètres du site
-  const paramSite = ref({ 
-    heuresEnsoleillement: 5, 
-    tensionSysteme: 48, 
-    longueurCableDC: 15, 
-    longueurCableAC: 10 
-  })
+  const paramSite = ref({ heuresEnsoleillement: 5, tensionSysteme: 48, longueurCableDC: 15, longueurCableAC: 10 })
+  const paramSys = ref({ puissancePanneau: 550, rendementSysteme: 75, joursAutonomie: 1, profondeurDecharge: 80, rendementBatterie: 95 })
 
-  // Paramètres du système
-  const paramSys = ref({ 
-    puissancePanneau: 550, 
-    rendementSysteme: 75, 
-    joursAutonomie: 1, 
-    profondeurDecharge: 80, 
-    rendementBatterie: 95 
-  })
+  // --- GROUPE ÉLECTROGÈNE ---
+  const aGroupeElectrogene = ref<boolean>(false)
+  const puissanceGroupeKVA = ref<number>(5)
 
-  // Équipements de l'utilisateur
+  // --- ÉQUIPEMENTS & MATÉRIELS ---
   const equipements = ref<Equipement[]>([
     { nom: 'Ampoules LED', quantite: 6, puissance: 10, puissanceDemarrage: 10, heures: 5 },
     { nom: 'Réfrigérateur', quantite: 1, puissance: 150, puissanceDemarrage: 450, heures: 8 }
   ])
 
-  // ==========================================
-  // 2. CATALOGUE DE PRIX (Modifiable)
-  // ==========================================
-  // Prix par défaut adaptés au marché (à ajuster selon vos fournisseurs)
-  const prixPanneau = ref<number>(100000)          // FCFA / panneau
-  const prixBatterieKwh = ref<number>(200000)      // FCFA / kWh
-  const prixOnduleurKVA = ref<number>(150000)      // FCFA / kVA
-  const prixRegulateurMPPT = ref<number>(150000)   // FCFA
-  
-  // Liste des matériels annexes par défaut
   const materiels = ref<Materiel[]>([
-    { nom: 'Régulateur MPPT', quantite: 1, prixUnitaire: prixRegulateurMPPT.value },
+    { nom: 'Régulateur MPPT', quantite: 1, prixUnitaire: 150000 },
     { nom: 'Rails de fixation', quantite: 1, prixUnitaire: 50000 },
     { nom: 'Coffret de protection AC/DC', quantite: 1, prixUnitaire: 75000 },
     { nom: 'Câbles DC (mètres)', quantite: 20, prixUnitaire: 2000 }
   ])
 
-  // ==========================================
-  // 3. SAUVEGARDE AUTOMATIQUE (localStorage)
-  // ==========================================
-  // On récupère les données sauvegardées lors de l'ouverture
+  // --- PRIX ---
+  const prixPanneau = ref<number>(100000)
+  const prixBatterieKwh = ref<number>(200000)
+  const prixOnduleurKVA = ref<number>(150000)
+
+  // --- MODE SOMBRE ---
+  const isDarkMode = ref<boolean>(false)
+
+  // --- SAUVEGARDE AUTOMATIQUE ---
   const dataSauvegardee = localStorage.getItem('cheffbuild_project')
   if (dataSauvegardee) {
     try {
@@ -66,43 +48,65 @@ export const useProjectStore = defineStore('project', () => {
       if (data.prioriteSysteme) prioriteSysteme.value = data.prioriteSysteme
       if (data.paramSite) paramSite.value = data.paramSite
       if (data.paramSys) paramSys.value = data.paramSys
+      if (data.aGroupeElectrogene !== undefined) aGroupeElectrogene.value = data.aGroupeElectrogene
+      if (data.puissanceGroupeKVA) puissanceGroupeKVA.value = data.puissanceGroupeKVA
       if (data.equipements) equipements.value = data.equipements
       if (data.materiels) materiels.value = data.materiels
       if (data.prixPanneau) prixPanneau.value = data.prixPanneau
       if (data.prixBatterieKwh) prixBatterieKwh.value = data.prixBatterieKwh
       if (data.prixOnduleurKVA) prixOnduleurKVA.value = data.prixOnduleurKVA
+      if (data.isDarkMode !== undefined) isDarkMode.value = data.isDarkMode
     } catch (e) {
-      console.error("Erreur de lecture des données locales", e)
+      console.error("Erreur lecture localStorage", e)
     }
   }
 
-  // On écoute toutes les modifications pour sauvegarder instantanément
+  // Appliquer le thème au chargement
+  if (isDarkMode.value) {
+    document.documentElement.setAttribute('data-theme', 'dark')
+  }
+
+  // Surveiller les changements
   watch(
-    [systemeSelectionne, prioriteSysteme, paramSite, paramSys, equipements, materiels, prixPanneau, prixBatterieKwh, prixOnduleurKVA],
+    [systemeSelectionne, prioriteSysteme, paramSite, paramSys, aGroupeElectrogene, puissanceGroupeKVA, equipements, materiels, prixPanneau, prixBatterieKwh, prixOnduleurKVA, isDarkMode],
     () => {
       localStorage.setItem('cheffbuild_project', JSON.stringify({
         systemeSelectionne: systemeSelectionne.value,
         prioriteSysteme: prioriteSysteme.value,
         paramSite: paramSite.value,
         paramSys: paramSys.value,
+        aGroupeElectrogene: aGroupeElectrogene.value,
+        puissanceGroupeKVA: puissanceGroupeKVA.value,
         equipements: equipements.value,
         materiels: materiels.value,
         prixPanneau: prixPanneau.value,
         prixBatterieKwh: prixBatterieKwh.value,
-        prixOnduleurKVA: prixOnduleurKVA.value
+        prixOnduleurKVA: prixOnduleurKVA.value,
+        isDarkMode: isDarkMode.value
       }))
     },
-    { deep: true } // deep: true permet de surveiller les changements à l'intérieur des tableaux et objets
+    { deep: true }
   )
 
-  // Fonction pour réinitialiser le projet
+  // Bascule du thème
+  const toggleDarkMode = () => {
+    isDarkMode.value = !isDarkMode.value
+    if (isDarkMode.value) {
+      document.documentElement.setAttribute('data-theme', 'dark')
+    } else {
+      document.documentElement.removeAttribute('data-theme')
+    }
+  }
+
   const resetProjet = () => {
     localStorage.removeItem('cheffbuild_project')
     window.location.reload()
   }
 
   return {
-    systemeSelectionne, prioriteSysteme, paramSite, paramSys, equipements, materiels,
-    prixPanneau, prixBatterieKwh, prixOnduleurKVA, resetProjet
+    systemeSelectionne, prioriteSysteme, paramSite, paramSys, 
+    aGroupeElectrogene, puissanceGroupeKVA,
+    equipements, materiels, prixPanneau, prixBatterieKwh, prixOnduleurKVA, 
+    isDarkMode, toggleDarkMode, resetProjet
   }
 })
